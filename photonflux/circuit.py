@@ -34,7 +34,7 @@ class PhotonicCircuit():
                     model=models_dict[nodes[i]['component']](info,settings),
                     ready=False,
                     )
-                
+
                 G.nodes[i]['port_names'] = G.nodes[i]['model'].port_names
             except Exception as e:
                 print(f"Model for component {e} not found")
@@ -55,12 +55,9 @@ class PhotonicCircuit():
                 # backward_propagating_field_value=None #TODO: Add in Fabry-perot style effects
             ) #Initialize graph to have "None"=no value for the propagating fields
 
-        # Add in nodes for all of the io ports and connect them to their respective components
-        io_optical_ports = []
-        for i in self.overall_ports:
-            if i[0] == 'o':
-                io_optical_ports.append(self.overall_ports[i])
-                
+        io_optical_ports = [
+            self.overall_ports[i] for i in self.overall_ports if i[0] == 'o'
+        ]
         self.graph, self.positions, self.ports =  G, positions, io_optical_ports
 
     def add_laser_port(self,port_to_connect_laser_to, positions):
@@ -160,9 +157,7 @@ class PhotonicCircuit():
 
     def reset_edge_values(self):
         for e in self.graph.edges:
-            if ("laser" in e[0]) or ("laser" in e[1]):
-                pass
-            else:
+            if "laser" not in e[0] and "laser" not in e[1]:
                 self.graph.edges[e]['forward_propagating_field_value'] = None
     
     def set_all_nodes_ready_false(self):
@@ -171,9 +166,7 @@ class PhotonicCircuit():
                 self.graph.nodes[n]['ready'] = False
 
     def are_all_nodes_ready(self):
-        bool_list = []
-        for n in self.graph.nodes:
-            bool_list.append(self.graph.nodes[n]['ready'])
+        bool_list = [self.graph.nodes[n]['ready'] for n in self.graph.nodes]
         return all(bool_list)
 
     def get_values_from_attached_edges(self,node):
@@ -191,9 +184,10 @@ class PhotonicCircuit():
                 self.graph.edges[i]['forward_propagating_field_value'] = value
 
     def are_all_values_in_edges_floats(self,node):
-        storage = []
-        for e in self.graph.edges(node):
-            storage.append(self.graph.edges[e]['forward_propagating_field_value'])
+        storage = [
+            self.graph.edges[e]['forward_propagating_field_value']
+            for e in self.graph.edges(node)
+        ]
         return any(storage)
 
     def propagate_field(self,node):
@@ -210,21 +204,19 @@ class PhotonicCircuit():
             from_port, to_port = element
             from_port_storage.append(values_from_attached_edges[from_port])
 
-        values_to_write = {}
         port_names = self.graph.nodes[node]['port_names']
-        for p in port_names:
-            values_to_write[p] = None
+        values_to_write = {p: None for p in port_names}
         for element in s_matrix:
             from_port, to_port = element
             try:
                 from_port_value = values_from_attached_edges[from_port]
                 value_to_write = s_matrix[element]*from_port_value
-                if values_to_write[to_port] == None:
+                if values_to_write[to_port] is None:
                     values_to_write[to_port] = 0
                 values_to_write[to_port] += value_to_write
             except:
                 pass
-        
+
         for p in port_names:
             if values_to_write[p] != None:
                 self.add_value_to_attached_edge(node,p,values_to_write[p])
@@ -261,12 +253,11 @@ class PhotonicCircuit():
             self.graph.nodes[n]['model'].update_time()
 
     def readout_from_photodetectors(self):
-        #Find detector nodes
-        detectors = []
-        for n in self.graph.nodes:
-            if "photodetector" in self.graph.nodes[n]['name']:
-                detectors.append(n)
-
+        detectors = [
+            n
+            for n in self.graph.nodes
+            if "photodetector" in self.graph.nodes[n]['name']
+        ]
         detector_values = []
         for d in detectors:
             temp = self.get_values_from_attached_edges(d)['o1']
@@ -275,12 +266,11 @@ class PhotonicCircuit():
         return np.real(detector_values*np.conj(detector_values))
 
     def readout_from_fielddetectors(self):
-        #Find detector nodes
-        fielddetectors = []
-        for n in self.graph.nodes:
-            if "fielddetector" in self.graph.nodes[n]['name']:
-                fielddetectors.append(n)
-
+        fielddetectors = [
+            n
+            for n in self.graph.nodes
+            if "fielddetector" in self.graph.nodes[n]['name']
+        ]
         detector_values = []
         for d in fielddetectors:
             temp = self.get_values_from_attached_edges(d)['o1']
@@ -288,7 +278,4 @@ class PhotonicCircuit():
         return np.array(detector_values)
 
     def return_components_callback(self,components):
-        returnable = []
-        for c in components:
-            returnable.append(self.graph.nodes[c]['model'])
-        return returnable
+        return [self.graph.nodes[c]['model'] for c in components]
